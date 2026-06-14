@@ -73,15 +73,24 @@ canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rg
 
 <!-- 战术工具栏 -->
 <div id="tbar" class="toolbar hidden">
-  <button class="tb-btn" onclick="setFormation('vertical')">竖排</button>
-  <button class="tb-btn" onclick="setFormation('horizontal')">横排</button>
-  <button class="tb-btn" onclick="setFormation('side')">侧排</button>
+  <button class="tb-btn" onclick="setFormation('vertical')">竖排进</button>
+  <button class="tb-btn" onclick="setFormation('horizontal')">横排进</button>
+  <button class="tb-btn" onclick="setFormation('side')">侧排进</button>
+  <button class="tb-btn" onclick="setFormation('spread')">散开进</button>
   <button class="tb-btn" onclick="setFormation('zone')">区域防</button>
+  <button class="tb-btn" onclick="setFormation('cup')">杯型防</button>
+  <button class="tb-btn" onclick="setFormation('wall')">墙式防</button>
   <button class="tb-btn" onclick="setFormation('man')">人盯人</button>
+  <button class="tb-btn" onclick="setFormation('force')">逼边</button>
+  <button class="tb-btn" onclick="setFormation('endzone')">得分区</button>
+  <button class="tb-btn" onclick="saveTactic()">💾 保存</button>
+  <button class="tb-btn" onclick="loadTactic()">📂 载入</button>
   <button class="tb-btn" onclick="clearAllRoutes()">清路线</button>
-  <button class="tb-btn" onclick="playAnimation()">▶ 演示</button>
+  <button class="tb-btn" onclick="playAnimation()" id="dmBtn">▶ 演示</button>
+  <button class="tb-btn" onclick="stepForward()">⏭ 下一步</button>
   <button class="tb-btn" onclick="switchPossession()">⇄ 换持盘</button>
-  <button class="tb-btn" onclick="toggleDrawMode()" id="dmBtn">✏ 跑位</button>
+  <button class="tb-btn" onclick="toggleDrawMode()" id="dmModeBtn">✏ 跑位</button>
+  <span id="fName" style="color:#0f8;font-size:12px;padding:4px 8px;background:rgba(0,0,0,.3);border-radius:4px;display:none"></span>
 </div>
 
 <script>
@@ -90,7 +99,8 @@ let msgTimer=null,gameRunning=false,gameMode='',score={l:0,r:0};
 const player={x:250,y:350,vx:0,vy:0,speed:5},ai={x:700,y:350,vx:0,vy:0,speed:3};
 const disc={x:500,y:300,vx:0,vy:0,r:10,rot:0,spin:0,holder:null,flying:false,lift:0.4,scored:false};
 let tacticMode=false,tacticPlayers=[],selectedPlayer=null,drawingPath=false,currentPath=[],drawMode='run';// 'run'|'pass'
-let playing=false,playTimer=0;
+let playing=false,playTimer=0,currentStep=0,totalSteps=0,playSpeed=1,currentFormation='竖排进攻';
+const savedTactics=JSON.parse(localStorage.getItem('frisbeeTactics')||'{}');
 const keys={},mx=500,my=300;
 const gesture={active:false,points:[],sx:0,sy:0};
 let touchJoy={active:false,sx:0,sy:0,cx:0,cy:0};
@@ -173,7 +183,6 @@ function setFormation(type){
   const half=tacticPlayers.length/2;
   const offense=tacticPlayers.slice(0,half),defense=tacticPlayers.slice(half);
   const holder=offense.find(p=>p.hasDisc)||offense[0];
-  const forceSide='backhand'; // 迫使反手侧
 
   // 进攻方统一设角色（清除持盘标记）
   offense.forEach((p,i)=>{p.role=i===0?'控盘手':'切盘手';p.path=null;p.pathIdx=0;p.pathOpacity=0;p.hasDisc=false});
@@ -259,8 +268,8 @@ function setFormation(type){
 
 function toggleDrawMode(){
   drawMode=drawMode==='run'?'pass':'run';
-  document.getElementById('dmBtn').textContent=drawMode==='run'?'✏ 跑位':'➜ 传盘';
-  document.getElementById('dmBtn').classList.toggle('on');
+  document.getElementById('dmModeBtn').textContent=drawMode==='run'?'✏ 跑位':'➜ 传盘';
+  document.getElementById('dmModeBtn').classList.toggle('on');
 }
 
 function clearAllRoutes(){
@@ -277,14 +286,59 @@ function switchPossession(){
   if(next){next.hasDisc=true;next.role='控盘手';showMsg('换持盘',800)}
 }
 
-// 动画演示
+// 动画演示（自动播放所有路线）
 function playAnimation(){
-  if(playing){playing=false;return}
+  if(playing){playing=false;document.getElementById('dmBtn').textContent='▶ 演示';return}
   const hasPath=tacticPlayers.some(p=>p.path&&p.path.length>1);
   if(!hasPath){showMsg('请先画路线',1000);return}
   playing=true;
   tacticPlayers.forEach(p=>{if(p.path&&p.path.length>1){p.pathIdx=0;p.pathOpacity=0}});
-  document.getElementById('dmBtn').textContent=playing?'⏹ 停止':'▶ 演示';
+  document.getElementById('dmBtn').textContent='⏹ 停止';
+  showMsg('▶ 配合演示开始',800)
+}
+
+// 单步执行
+function stepForward(){
+  if(playing){playing=false;document.getElementById('dmBtn').textContent='▶ 演示';return}
+  for(const p of tacticPlayers){
+    if(p.path&&p.pathIdx<p.path.length){
+      p.pathIdx=Math.min(p.pathIdx+Math.ceil(p.path.length/10),p.path.length);
+      if(p.pathIdx>=p.path.length)p.pathOpacity=1
+    }
+  }
+  showMsg('⏭ 下一步',500)
+}
+
+// 保存战术到 localStorage
+function saveTactic(){
+  const name=prompt('战术名称：','我的战术')||'未命名';
+  const data={formation:currentFormation,players:tacticPlayers.map(p=>({
+    x:Math.round(p.x),y:Math.round(p.y),role:p.role,color:p.color,hasDisc:p.hasDisc,
+    path:p.path?p.path.map(pt=>({x:Math.round(pt.x),y:Math.round(pt.y)})):null
+  }))};
+  savedTactics[name]=data;
+  localStorage.setItem('frisbeeTactics',JSON.stringify(savedTactics));
+  showMsg('💾 已保存：'+name,1200)
+}
+
+// 载入战术
+function loadTactic(){
+  const names=Object.keys(savedTactics);
+  if(names.length===0){showMsg('暂无已保存的战术',1500);return}
+  let msg='已保存的战术：\n';
+  names.forEach((n,i)=>msg+=(i+1)+'. '+n+'\n');
+  const idx=parseInt(prompt(msg+'输入序号载入：'))-1;
+  if(isNaN(idx)||idx<0||idx>=names.length)return;
+  const data=savedTactics[names[idx]];
+  if(!data||!data.players||data.players.length!==tacticPlayers.length){showMsg('战术数据不匹配',1500);return}
+  tacticPlayers.forEach((p,i)=>{
+    const d=data.players[i];
+    if(d){p.x=d.x;p.y=d.y;p.role=d.role;p.hasDisc=d.hasDisc;
+      p.path=d.path?d.path.map(pt=>({...pt})):null;p.pathIdx=0;p.pathOpacity=0}
+  });
+  document.getElementById('fName').textContent='📋 '+data.formation;
+  document.getElementById('fName').style.display='inline';
+  showMsg('📂 已载入：'+names[idx],1200)
 }
 
 function resetDisc(){disc.x=500;disc.y=300;disc.vx=0;disc.vy=0;disc.holder=null;disc.flying=false;disc.rot=0;disc.scored=false}
