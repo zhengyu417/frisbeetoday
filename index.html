@@ -31,6 +31,11 @@ canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rg
 </head>
 <body>
 
+<!-- 浮动返回按钮（手机用） -->
+<div id="floatBack" class="hidden" style="position:fixed;top:12px;right:12px;z-index:50;pointer-events:auto" onclick="returnToMenu()">
+  <div style="width:44px;height:44px;border-radius:50%;background:rgba(100,40,40,.7);color:#fff;font-size:22px;line-height:44px;text-align:center;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.15)">✕</div>
+</div>
+
 <!-- 主菜单 -->
 <div id="menu" class="overlay">
   <div class="panel">
@@ -69,7 +74,7 @@ canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rg
 
 <canvas id="c" width="1000" height="600"></canvas>
 <div id="msg"></div>
-<div id="dpad"><div><div class="d" data-k="KeyA">←</div><div class="d" data-k="KeyW">↑</div><div class="d" data-k="KeyD">→</div><div class="d" data-k="KeyS">↓</div></div></div>
+<div id="dpad"><div><div class="d" data-k="KeyA">←</div><div class="d" data-k="KeyW">↑</div><div class="d" data-k="KeyD">→</div><div class="d" data-k="KeyS">↓</div><div class="d" onclick="returnToMenu()" style="background:rgba(100,40,40,.5);font-size:16px">返回</div></div></div>
 
 <!-- 战术工具栏 -->
 <div id="tbar" class="toolbar hidden">
@@ -87,9 +92,11 @@ canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rg
   <button class="tb-btn" onclick="loadTactic()">📂 载入</button>
   <button class="tb-btn" onclick="clearAllRoutes()">清路线</button>
   <button class="tb-btn" onclick="playAnimation()" id="dmBtn">▶ 演示</button>
-  <button class="tb-btn" onclick="stepForward()">⏭ 下一步</button>
+  <button class="tb-btn" onclick="toggleLoop()" id="loopBtn">🔁 单次</button>
+  <button class="tb-btn" onclick="stepForward()">⏭ 步进</button>
   <button class="tb-btn" onclick="switchPossession()">⇄ 换持盘</button>
   <button class="tb-btn" onclick="toggleDrawMode()" id="dmModeBtn">✏ 跑位</button>
+  <button class="tb-btn" onclick="returnToMenu()" style="background:rgba(100,40,40,.8)">✕ 返回</button>
   <span id="fName" style="color:#0f8;font-size:12px;padding:4px 8px;background:rgba(0,0,0,.3);border-radius:4px;display:none"></span>
 </div>
 
@@ -99,7 +106,7 @@ let msgTimer=null,gameRunning=false,gameMode='',score={l:0,r:0};
 const player={x:250,y:350,vx:0,vy:0,speed:5},ai={x:700,y:350,vx:0,vy:0,speed:3};
 const disc={x:500,y:300,vx:0,vy:0,r:10,rot:0,spin:0,holder:null,flying:false,lift:0.4,scored:false};
 let tacticMode=false,tacticPlayers=[],selectedPlayer=null,drawingPath=false,currentPath=[],drawMode='run';// 'run'|'pass'
-let playing=false,playTimer=0,currentStep=0,totalSteps=0,playSpeed=1,currentFormation='竖排进攻';
+let playing=false,playTimer=0,currentStep=0,totalSteps=0,playSpeed=1,currentFormation='竖排进攻',demoLoop=false,demoPhase='reset',demoWait=0;
 const savedTactics=JSON.parse(localStorage.getItem('frisbeeTactics')||'{}');
 const keys={},mx=500,my=300;
 const gesture={active:false,points:[],sx:0,sy:0};
@@ -133,6 +140,7 @@ function returnToMenu(){
   document.getElementById('tacticMenu').classList.add('hidden');
   document.getElementById('dpad').classList.add('hidden');
   document.getElementById('tbar').classList.add('hidden');
+  document.getElementById('floatBack').classList.add('hidden');
   selectedPlayer=null;drawingPath=false;currentPath=[];playing=false;
   hideMsg()
 }
@@ -144,6 +152,7 @@ function startMatch(n){
   ai.x=700;ai.y=350;ai.vx=0;ai.vy=0;
   score={l:0,r:0};disc.holder=null;disc.flying=false;disc.x=500;disc.y=300;disc.scored=false;
   if(window.innerWidth<800)document.getElementById('dpad').classList.remove('hidden');
+  document.getElementById('floatBack').classList.remove('hidden');
   hideMsg();requestAnimationFrame(loop)
 }
 
@@ -164,13 +173,14 @@ function startTactic(n){
     tacticPlayers.push({
       x:baseX+col*sp,y:baseY+row*55,
       vx:0,vy:0,speed:2+Math.random(),
-      path:null,pathIdx:0,pathOpacity:0,
+      path:null,pathIdx:0,pathOpacity:0,pathStart:null,
       color:isBlue?'#48f':'#f44',
       role:teamHolds?(idx===0?'控盘手':'切盘手'):(idx===0?'主防守':'协防'),
       hasDisc:teamHolds&&idx===0
     });
   }
   if(window.innerWidth<800)document.getElementById('dpad').classList.remove('hidden');
+  document.getElementById('floatBack').classList.remove('hidden');
   hideMsg();
   // 默认竖排阵型
   setTimeout(()=>setFormation('vertical'),100);
@@ -288,25 +298,53 @@ function switchPossession(){
 
 // 动画演示（自动播放所有路线）
 function playAnimation(){
-  if(playing){playing=false;document.getElementById('dmBtn').textContent='▶ 演示';return}
+  if(playing){
+    playing=false;demoLoop=false;
+    document.getElementById('dmBtn').textContent='▶ 演示';
+    // 复位
+    tacticPlayers.forEach(p=>{if(p.pathStart){p.x=p.pathStart.x;p.y=p.pathStart.y;p.pathIdx=0;p.pathOpacity=0}});
+    return
+  }
   const hasPath=tacticPlayers.some(p=>p.path&&p.path.length>1);
   if(!hasPath){showMsg('请先画路线',1000);return}
-  playing=true;
-  tacticPlayers.forEach(p=>{if(p.path&&p.path.length>1){p.pathIdx=0;p.pathOpacity=0}});
+
+  // 先记录起点并回到起点
+  tacticPlayers.forEach(p=>{
+    if(p.path&&p.path.length>1){
+      p.pathStart={x:p.path[0].x,y:p.path[0].y};
+      p.x=p.pathStart.x;p.y=p.pathStart.y;
+      p.pathIdx=0;p.pathOpacity=0
+    }
+  });
+  playing=true;demoPhase='running';
   document.getElementById('dmBtn').textContent='⏹ 停止';
-  showMsg('▶ 配合演示开始',800)
+  showMsg('▶ 配合演示 - 全员就位',800)
 }
 
 // 单步执行
 function stepForward(){
   if(playing){playing=false;document.getElementById('dmBtn').textContent='▶ 演示';return}
+  let moved=false;
   for(const p of tacticPlayers){
     if(p.path&&p.pathIdx<p.path.length){
-      p.pathIdx=Math.min(p.pathIdx+Math.ceil(p.path.length/10),p.path.length);
-      if(p.pathIdx>=p.path.length)p.pathOpacity=1
+      p.pathIdx=Math.min(p.pathIdx+Math.ceil(p.path.length/8),p.path.length);
+      if(p.pathIdx>=p.path.length)p.pathOpacity=1;
+      moved=true
     }
   }
-  showMsg('⏭ 下一步',500)
+  if(!moved){// 没有路线，重新开始
+    tacticPlayers.forEach(p=>{
+      if(p.pathStart){p.x=p.pathStart.x;p.y=p.pathStart.y;p.pathIdx=0;p.pathOpacity=0;moved=true}
+    })
+  }
+  showMsg('⏭ 步进',500)
+}
+
+// 循环演示开关
+function toggleLoop(){
+  demoLoop=!demoLoop;
+  document.getElementById('loopBtn').textContent=demoLoop?'🔁 循环':'🔁 单次';
+  document.getElementById('loopBtn').classList.toggle('on');
 }
 
 // 保存战术到 localStorage
@@ -334,7 +372,7 @@ function loadTactic(){
   tacticPlayers.forEach((p,i)=>{
     const d=data.players[i];
     if(d){p.x=d.x;p.y=d.y;p.role=d.role;p.hasDisc=d.hasDisc;
-      p.path=d.path?d.path.map(pt=>({...pt})):null;p.pathIdx=0;p.pathOpacity=0}
+      p.path=d.path?d.path.map(pt=>({...pt})):null;p.pathIdx=0;p.pathOpacity=0;p.pathStart=p.path&&p.path.length>1?{x:p.path[0].x,y:p.path[0].y}:null}
   });
   document.getElementById('fName').textContent='📋 '+data.formation;
   document.getElementById('fName').style.display='inline';
@@ -346,7 +384,11 @@ function resetDisc(){disc.x=500;disc.y=300;disc.vx=0;disc.vy=0;disc.holder=null;
 // ===== 事件 =====
 window.addEventListener('keydown',e=>{
   keys[e.code]=true;
-  if(e.code==='Escape'){if(gameRunning)returnToMenu();else{hideMatch();hideTactic()}}
+  if(e.code==='Escape'){
+    if(gameRunning)returnToMenu();
+    else if(!document.getElementById('matchMenu').classList.contains('hidden'))hideMatch();
+    else if(!document.getElementById('tacticMenu').classList.contains('hidden'))hideTactic();
+  }
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()
 });
 window.addEventListener('keyup',e=>{keys[e.code]=false});
@@ -373,7 +415,7 @@ canvas.addEventListener('mouseup',e=>{
   if(gesture.active&&disc.holder==='player'&&gesture.points.length>1)calcThrow();
   gesture.active=false;gesture.points=[];
   if(drawingPath){drawingPath=false;if(currentPath.length>3&&selectedPlayer!==null){
-    tacticPlayers[selectedPlayer].path=[...currentPath];tacticPlayers[selectedPlayer].pathIdx=0;tacticPlayers[selectedPlayer].pathOpacity=0;
+    tacticPlayers[selectedPlayer].path=[...currentPath];tacticPlayers[selectedPlayer].pathIdx=0;tacticPlayers[selectedPlayer].pathOpacity=0;tacticPlayers[selectedPlayer].pathStart={x:currentPath[0].x,y:currentPath[0].y};
   }currentPath=[]}
 });
 
@@ -444,7 +486,7 @@ canvas.addEventListener('touchend',e=>{
   if(drawingPath){
     drawingPath=false;
     if(currentPath.length>3&&selectedPlayer!==null){
-      tacticPlayers[selectedPlayer].path=[...currentPath];tacticPlayers[selectedPlayer].pathIdx=0;tacticPlayers[selectedPlayer].pathOpacity=0;
+      tacticPlayers[selectedPlayer].path=[...currentPath];tacticPlayers[selectedPlayer].pathIdx=0;tacticPlayers[selectedPlayer].pathOpacity=0;tacticPlayers[selectedPlayer].pathStart={x:currentPath[0].x,y:currentPath[0].y};
     }
     currentPath=[]
   }
@@ -529,13 +571,26 @@ function update(){
     return
   }
 
-  // 战术模式更新
+  // 战术模式演示更新
   if(playing){
     let allDone=true;
     for(const p of tacticPlayers){
       if(p.path&&p.pathIdx<p.path.length){allDone=false;break}
     }
-    if(allDone){playing=false;document.getElementById('dmBtn').textContent='▶ 演示';return}
+    if(allDone){
+      if(demoLoop){
+        // 循环模式：回到起点重新开始
+        tacticPlayers.forEach(p=>{
+          if(p.pathStart){p.x=p.pathStart.x;p.y=p.pathStart.y;p.pathIdx=0;p.pathOpacity=0}
+        });
+        showMsg('🔄 循环演示',600);
+        return
+      }else{
+        playing=false;
+        document.getElementById('dmBtn').textContent='▶ 演示';
+        return
+      }
+    }
   }
 
   for(const p of tacticPlayers){
@@ -631,7 +686,15 @@ function draw(){
         // 路线终点箭头
         ctx.fillStyle=p.color;
         const a=Math.atan2(lastY-p.path[p.path.length-2].y,lastX-p.path[p.path.length-2].x);
-        drawArrow(lastX,lastY,a,p.color)
+        drawArrow(lastX,lastY,a,p.color);
+        // 路线节点标记（每10%一个节点）
+        if(p.path.length>10){
+          const step=Math.max(1,Math.floor(p.path.length/10));
+          for(let k=step;k<p.path.length-1;k+=step){
+            ctx.fillStyle='rgba(255,255,255,.3)';
+            ctx.beginPath();ctx.arc(p.path[k].x,p.path[k].y,3,0,Math.PI*2);ctx.fill()
+          }
+        }
       }
       // 阴影
       ctx.fillStyle='rgba(0,0,0,.2)';
