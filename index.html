@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>盘了么 - 飞盘战术模拟</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+body{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);display:flex;align-items:center;justify-content:center;font-family:'PingFang SC','Microsoft YaHei',-apple-system,sans-serif}
+canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rgba(0,0,0,.6);cursor:crosshair;background:#2b8a3e;touch-action:none}
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:100;background:rgba(0,0,0,.65)}
+.panel{text-align:center;background:linear-gradient(145deg,rgba(22,33,62,.98),rgba(30,45,80,.98));padding:35px 45px;border-radius:24px;box-shadow:0 0 80px rgba(0,255,136,.08),0 30px 60px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto;border:1px solid rgba(255,255,255,.06)}
+.panel h1{font-size:60px;color:#0f8;margin-bottom:4px;text-shadow:0 0 30px rgba(0,255,136,.3)}
+.panel .sub{color:#8899bb;font-size:15px;margin-bottom:18px}
+.btn{display:block;width:220px;padding:14px;margin:9px auto;background:linear-gradient(135deg,#1a3a5c,#224466);color:#fff;border:none;border-radius:12px;font-size:18px;cursor:pointer;letter-spacing:2px;transition:all .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,255,136,.15);background:linear-gradient(135deg,#224466,#2a5588);color:#0f8}
+.btn-gray{background:rgba(60,60,80,.7);margin-top:22px}
+.btn-gray:hover{background:rgba(80,80,100,.85);color:#fff;transform:none}
+.help{color:#667;font-size:13px;margin-top:18px}
+#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:40px;color:#fff;font-weight:bold;background:rgba(0,0,0,.7);padding:18px 28px;border-radius:14px;pointer-events:none;z-index:50;display:none;text-shadow:0 2px 10px rgba(0,0,0,.5);backdrop-filter:blur(4px)}
+.hidden{display:none!important}
+.toolbar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:5px;flex-wrap:wrap;justify-content:center;pointer-events:auto;z-index:30;max-width:96vw;padding:4px 0}
+.tb-btn{padding:7px 14px;font-size:13px;border:none;border-radius:8px;background:rgba(20,35,55,.88);color:#cde;cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);transition:all .15s}
+.tb-btn:hover{background:rgba(40,70,100,.9);color:#0f8;border-color:rgba(0,255,136,.2)}
+.tb-btn.on{background:#0f8;color:#111;border-color:#0f8}
+#dpad{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:30;display:none}
+#dpad>div{display:flex;gap:4px;pointer-events:auto}
+#dpad .d{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.15);font:bold 24px/56px sans-serif;color:#fff;text-align:center;backdrop-filter:blur(4px)}
+</style>
+</head>
+<body>
+
+<!-- 主菜单 -->
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>盘了么</h1>
+    <p style="color:#8af;font-size:16px;margin-bottom:30px">Ultimate Frisbee Simulator</p>
+    <button class="btn" onclick="showMatch()">对战模式</button>
+    <button class="btn" onclick="showTactic()">战术模拟</button>
+    <div class="help">按 ESC 返回</div>
+  </div>
+</div>
+
+<!-- 对战模式 -->
+<div id="matchMenu" class="overlay hidden">
+  <div class="panel">
+    <h2 style="color:#48f">对战模式</h2>
+    <div class="sub">选择对阵人数</div>
+    <button class="btn" onclick="startMatch(1)">1v1 单挑</button>
+    <button class="btn" onclick="startMatch(2)">2v2 对抗</button>
+    <button class="btn" onclick="startMatch(3)">3v3 比赛</button>
+    <button class="btn" onclick="startMatch(4)">4v4 比赛</button>
+    <button class="btn btn-gray" onclick="hideMatch()">返回</button>
+  </div>
+</div>
+
+<!-- 战术模式选人数 -->
+<div id="tacticMenu" class="overlay hidden">
+  <div class="panel">
+    <h2 style="color:#0f8">战术模拟</h2>
+    <div class="sub">选择阵容人数</div>
+    <button class="btn" onclick="startTactic(7)">7v7 完整阵型</button>
+    <button class="btn" onclick="startTactic(5)">5v5 小型阵</button>
+    <button class="btn" onclick="startTactic(4)">4v4 半场阵</button>
+    <button class="btn btn-gray" onclick="hideTactic()">返回</button>
+  </div>
+</div>
+
+<canvas id="c" width="1000" height="600"></canvas>
+<div id="msg"></div>
+<div id="dpad"><div><div class="d" data-k="KeyA">←</div><div class="d" data-k="KeyW">↑</div><div class="d" data-k="KeyD">→</div><div class="d" data-k="KeyS">↓</div></div></div>
+
+<!-- 战术工具栏 -->
+<div id="tbar" class="toolbar hidden">
+  <button class="tb-btn" onclick="setFormation('vertical')">竖排</button>
+  <button class="tb-btn" onclick="setFormation('horizontal')">横排</button>
+  <button class="tb-btn" onclick="setFormation('side')">侧排</button>
+  <button class="tb-btn" onclick="setFormation('zone')">区域防</button>
+  <button class="tb-btn" onclick="setFormation('man')">人盯人</button>
+  <button class="tb-btn" onclick="clearAllRoutes()">清路线</button>
+  <button class="tb-btn" onclick="playAnimation()">▶ 演示</button>
+  <button class="tb-btn" onclick="switchPossession()">⇄ 换持盘</button>
+  <button class="tb-btn" onclick="toggleDrawMode()" id="dmBtn">✏ 跑位</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),msgEl=document.getElementById('msg');
+let msgTimer=null,gameRunning=false,gameMode='',score={l:0,r:0};
+const player={x:250,y:350,vx:0,vy:0,speed:5},ai={x:700,y:350,vx:0,vy:0,speed:3};
+const disc={x:500,y:300,vx:0,vy:0,r:10,rot:0,spin:0,holder:null,flying:false,lift:0.4,scored:false};
+let tacticMode=false,tacticPlayers=[],selectedPlayer=null,drawingPath=false,currentPath=[],drawMode='run';// 'run'|'pass'
+let playing=false,playTimer=0;
+const keys={},mx=500,my=300;
+const gesture={active:false,points:[],sx:0,sy:0};
+let touchJoy={active:false,sx:0,sy:0,cx:0,cy:0};
+const FIELD={w:1000,h:600,endZ:120};
+
+function resizeCanvas(){
+  const mw=Math.min(window.innerWidth-8,1000),mh=Math.min(window.innerHeight-8,600),r=1000/600;
+  let w=mw,h=w/r;if(h>mh){h=mh;w=h*r}
+  canvas.style.width=w+'px';canvas.style.height=h+'px'
+}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+
+document.querySelectorAll('#dpad .d').forEach(el=>{
+  const k=el.dataset.k;el.addEventListener('touchstart',e=>{e.preventDefault();keys[k]=true});
+  el.addEventListener('touchend',e=>{e.preventDefault();keys[k]=false})
+});
+
+function showMsg(t,d){msgEl.style.display='block';msgEl.textContent=t;if(msgTimer)clearTimeout(msgTimer);if(d)msgTimer=setTimeout(()=>msgEl.style.display='none',d)}
+function hideMsg(){msgEl.style.display='none';if(msgTimer)clearTimeout(msgTimer)}
+
+function showMatch(){document.getElementById('menu').classList.add('hidden');document.getElementById('matchMenu').classList.remove('hidden')}
+function hideMatch(){document.getElementById('matchMenu').classList.add('hidden');document.getElementById('menu').classList.remove('hidden')}
+function showTactic(){document.getElementById('menu').classList.add('hidden');document.getElementById('tacticMenu').classList.remove('hidden')}
+function hideTactic(){document.getElementById('tacticMenu').classList.add('hidden');document.getElementById('menu').classList.remove('hidden')}
+
+function returnToMenu(){
+  gameRunning=false;tacticMode=false;
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('matchMenu').classList.add('hidden');
+  document.getElementById('tacticMenu').classList.add('hidden');
+  document.getElementById('dpad').classList.add('hidden');
+  document.getElementById('tbar').classList.add('hidden');
+  selectedPlayer=null;drawingPath=false;currentPath=[];playing=false;
+  hideMsg()
+}
+
+function startMatch(n){
+  document.getElementById('matchMenu').classList.add('hidden');
+  gameMode='match';gameRunning=true;tacticMode=false;
+  player.x=250;player.y=350;player.vx=0;player.vy=0;
+  ai.x=700;ai.y=350;ai.vx=0;ai.vy=0;
+  score={l:0,r:0};disc.holder=null;disc.flying=false;disc.x=500;disc.y=300;disc.scored=false;
+  if(window.innerWidth<800)document.getElementById('dpad').classList.remove('hidden');
+  hideMsg();requestAnimationFrame(loop)
+}
+
+// ===== 战术模式 =====
+function startTactic(n){
+  document.getElementById('tacticMenu').classList.add('hidden');
+  gameMode='tactic';gameRunning=true;tacticMode=true;
+  tacticPlayers=[];selectedPlayer=null;drawingPath=false;currentPath=[];playing=false;
+  document.getElementById('tbar').classList.remove('hidden');
+
+  const side=n,cols=Math.min(3,side),rows=Math.ceil(side/cols);
+  const discTeam=Math.random()>0.5?'blue':'red';
+  for(let i=0;i<side*2;i++){
+    const isBlue=i<side,idx=isBlue?i:i-side;
+    const row=Math.floor(idx/cols),col=idx%cols;
+    const sp=Math.min(80,220/cols),baseX=isBlue?FIELD.endZ+30:FIELD.w-FIELD.endZ-30-side*sp/cols*2,baseY=160;
+    const teamHolds=(isBlue&&discTeam==='blue')||(!isBlue&&discTeam==='red');
+    tacticPlayers.push({
+      x:baseX+col*sp,y:baseY+row*55,
+      vx:0,vy:0,speed:2+Math.random(),
+      path:null,pathIdx:0,pathOpacity:0,
+      color:isBlue?'#48f':'#f44',
+      role:teamHolds?(idx===0?'控盘手':'切盘手'):(idx===0?'主防守':'协防'),
+      hasDisc:teamHolds&&idx===0
+    });
+  }
+  if(window.innerWidth<800)document.getElementById('dpad').classList.remove('hidden');
+  hideMsg();
+  // 默认竖排阵型
+  setTimeout(()=>setFormation('vertical'),100);
+  requestAnimationFrame(loop)
+}
+
+// 阵型预设（进攻 vs 防守配对）
+function setFormation(type){
+  if(!tacticMode||tacticPlayers.length===0)return;
+  const half=tacticPlayers.length/2;
+  const offense=tacticPlayers.slice(0,half),defense=tacticPlayers.slice(half);
+  const holder=offense.find(p=>p.hasDisc)||offense[0];
+  const forceSide='backhand'; // 迫使反手侧
+
+  // 进攻方统一设角色（清除持盘标记）
+  offense.forEach((p,i)=>{p.role=i===0?'控盘手':'切盘手';p.path=null;p.pathIdx=0;p.pathOpacity=0;p.hasDisc=false});
+  // 防守方统一设角色（清除持盘标记）
+  defense.forEach((p,i)=>{p.role=i===0?'主防':'协防';p.path=null;p.pathIdx=0;p.pathOpacity=0;p.hasDisc=false});
+
+  if(type==='vertical'){
+    // === 竖排进攻 (Vertical Stack) ===
+    // 进攻：沿中线一竖排开，控盘手在后，切盘手依次向前
+    offense.forEach((p,i)=>{
+      p.x=FIELD.endZ+80;
+      p.y=150+i*45;
+    });
+    holder.x=FIELD.endZ+40;holder.y=300; // 控盘手靠后
+    // 防守：人盯人，在进攻队员前方2米处，迫使向反手侧
+    defense.forEach((p,i)=>{
+      const target=offense[i]||offense[offense.length-1];
+      p.x=target.x+60;
+      p.y=target.y-20;
+    });
+  }else if(type==='horizontal'){
+    // === 横排进攻 (Horizontal Stack) ===
+    // 进攻：沿宽度方向一字排开
+    offense.forEach((p,i)=>{
+      p.x=FIELD.endZ+60+Math.floor(i/2)*80;
+      p.y=170+(i%2)*160;
+    });
+    holder.x=FIELD.endZ+30;holder.y=300;
+    // 防守：横排防守，在进攻队员前方
+    defense.forEach((p,i)=>{
+      const target=offense[i]||offense[offense.length-1];
+      p.x=target.x+50;
+      p.y=target.y;
+    });
+  }else if(type==='side'){
+    // === 侧排进攻 (Side Stack) ===
+    // 进攻：堆叠在一侧，留出大片空间
+    offense.forEach((p,i)=>{
+      p.x=FIELD.endZ+40+Math.floor(i/3)*30;
+      p.y=150+(i%3)*90;
+    });
+    holder.x=FIELD.endZ+30;holder.y=300;
+    // 防守：在进攻队员和空间之间
+    defense.forEach((p,i)=>{
+      p.x=offense[i].x+60;
+      p.y=offense[i].y;
+    });
+  }else if(type==='zone'){
+    // === 区域联防 (Zone Defense) ===
+    // 进攻方正常站位
+    offense.forEach((p,i)=>{
+      p.x=FIELD.endZ+60+i*40;
+      p.y=200+((i)%2)*120;
+    });
+    // 防守方区域联防：杯型+中场+深远
+    const zonePos=[
+      [FIELD.endZ+130,260],[FIELD.endZ+130,300],[FIELD.endZ+130,340], // cup
+      [FIELD.endZ+210,200],[FIELD.endZ+210,380],                        // 中场
+      [FIELD.endZ+300,240],[FIELD.endZ+300,350]                          // 深远
+    ];
+    defense.forEach((p,i)=>{
+      if(i<zonePos.length){p.x=zonePos[i][0];p.y=zonePos[i][1];}
+    });
+  }else if(type==='man'){
+    // === 人盯人 (Man Defense) ===
+    // 进攻方横向散开
+    offense.forEach((p,i)=>{
+      p.x=FIELD.endZ+60+i*70;
+      p.y=200+(i%2)*100;
+    });
+    // 防守：一对一标记，站在进攻队员和得分区之间
+    defense.forEach((p,i)=>{
+      const target=offense[i]||offense[offense.length-1];
+      const angle=Math.atan2(350-target.y,FIELD.w-FIELD.endZ-target.x);
+      p.x=target.x+Math.cos(angle)*40;
+      p.y=target.y+Math.sin(angle)*40;
+    });
+  }
+
+  // 确保持盘人正确（仅进攻方持盘）
+  holder.hasDisc=true;holder.role='控盘手';
+}
+
+function toggleDrawMode(){
+  drawMode=drawMode==='run'?'pass':'run';
+  document.getElementById('dmBtn').textContent=drawMode==='run'?'✏ 跑位':'➜ 传盘';
+  document.getElementById('dmBtn').classList.toggle('on');
+}
+
+function clearAllRoutes(){
+  tacticPlayers.forEach(p=>{p.path=null;p.pathIdx=0;p.pathOpacity=0});
+  selectedPlayer=null;drawingPath=false;currentPath=[];
+}
+
+function switchPossession(){
+  const h=tacticPlayers.find(p=>p.hasDisc);
+  if(!h)return;
+  h.hasDisc=false;h.role=h.color==='#48f'?'切盘手':'协防';
+  const team=tacticPlayers.filter(p=>p.color===h.color);
+  const next=team.find(p=>p!==h&&!p.hasDisc);
+  if(next){next.hasDisc=true;next.role='控盘手';showMsg('换持盘',800)}
+}
+
+// 动画演示
+function playAnimation(){
+  if(playing){playing=false;return}
+  const hasPath=tacticPlayers.some(p=>p.path&&p.path.length>1);
+  if(!hasPath){showMsg('请先画路线',1000);return}
+  playing=true;
+  tacticPlayers.forEach(p=>{if(p.path&&p.path.length>1){p.pathIdx=0;p.pathOpacity=0}});
+  document.getElementById('dmBtn').textContent=playing?'⏹ 停止':'▶ 演示';
+}
+
+function resetDisc(){disc.x=500;disc.y=300;disc.vx=0;disc.vy=0;disc.holder=null;disc.flying=false;disc.rot=0;disc.scored=false}
+
+// ===== 事件 =====
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Escape'){if(gameRunning)returnToMenu();else{hideMatch();hideTactic()}}
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()
+});
+window.addEventListener('keyup',e=>{keys[e.code]=false});
+
+function getCanvasXY(e){
+  const r=canvas.getBoundingClientRect();
+  return[(e.clientX-r.left)*(canvas.width/r.width),(e.clientY-r.top)*(canvas.height/r.height)]
+}
+
+canvas.addEventListener('mousemove',e=>{
+  const[x,y]=getCanvasXY(e);
+  if(gesture.active)gesture.points.push({x,y});
+  if(drawingPath)currentPath.push({x,y})
+});
+
+canvas.addEventListener('mousedown',e=>{
+  if(!gameRunning||tacticMode)return;
+  const[x,y]=getCanvasXY(e);
+  if(disc.holder==='player'){gesture.active=true;gesture.points=[{x,y}];gesture.sx=x;gesture.sy=y}
+});
+
+canvas.addEventListener('mouseup',e=>{
+  if(!gameRunning)return;
+  if(gesture.active&&disc.holder==='player'&&gesture.points.length>1)calcThrow();
+  gesture.active=false;gesture.points=[];
+  if(drawingPath){drawingPath=false;if(currentPath.length>3&&selectedPlayer!==null){
+    tacticPlayers[selectedPlayer].path=[...currentPath];tacticPlayers[selectedPlayer].pathIdx=0;tacticPlayers[selectedPlayer].pathOpacity=0;
+  }currentPath=[]}
+});
+
+canvas.addEventListener('click',e=>{
+  if(!gameRunning)return;
+  const[x,y]=getCanvasXY(e);
+  if(tacticMode){
+    for(let i=0;i<tacticPlayers.length;i++){
+      if(Math.hypot(tacticPlayers[i].x-x,tacticPlayers[i].y-y)<28){
+        const c=tacticPlayers[i],h=tacticPlayers.find(p=>p.hasDisc);
+        // 持盘人双击队友传盘
+        if(h&&h!==c&&h.color===c.color&&selectedPlayer===i){
+          h.hasDisc=false;h.role=c.color==='#48f'?'切盘手':'协防';
+          drawPassLine(h.x,h.y,c.x,c.y,h.color);
+          c.hasDisc=true;c.role='控盘手';
+          showMsg('传盘成功!',800);selectedPlayer=null;return
+        }
+        // 单击选中/取消
+        if(selectedPlayer===i){selectedPlayer=null;return}
+        selectedPlayer=i;
+        drawingPath=true;
+        currentPath=[{x:c.x,y:c.y}];
+        return
+      }
+    }
+    selectedPlayer=null;return
+  }
+  if(disc.holder!=='player'&&Math.hypot(disc.x-player.x,disc.y-player.y)<50){
+    disc.holder='player';disc.flying=false;disc.vx=0;disc.vy=0
+  }
+});
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();if(!gameRunning)return;
+  const t=e.touches[0],r=canvas.getBoundingClientRect();
+  const x=(t.clientX-r.left)*(canvas.width/r.width),y=(t.clientY-r.top)*(canvas.height/r.height);
+  if(tacticMode){
+    for(let i=0;i<tacticPlayers.length;i++){
+      if(Math.hypot(tacticPlayers[i].x-x,tacticPlayers[i].y-y)<30){
+        const c=tacticPlayers[i],h=tacticPlayers.find(p=>p.hasDisc);
+        if(h&&h!==c&&h.color===c.color&&selectedPlayer===i){
+          h.hasDisc=false;h.role=c.color==='#48f'?'切盘手':'协防';
+          c.hasDisc=true;c.role='控盘手';
+          showMsg('传盘成功!',800);selectedPlayer=null;return
+        }
+        if(selectedPlayer===i){selectedPlayer=null;return}
+        selectedPlayer=i;drawingPath=true;currentPath=[{x:c.x,y:c.y}];return
+      }
+    }
+    selectedPlayer=null;return
+  }
+  if(disc.holder==='player'){gesture.active=true;gesture.points=[{x,y}];gesture.sx=x;gesture.sy=y}
+  else{touchJoy.active=true;touchJoy.sx=x;touchJoy.sy=y;touchJoy.cx=x;touchJoy.cy=y}
+});
+
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();
+  const x=(t.clientX-r.left)*(canvas.width/r.width),y=(t.clientY-r.top)*(canvas.height/r.height);
+  if(gesture.active)gesture.points.push({x,y});
+  if(drawingPath)currentPath.push({x,y});
+  if(touchJoy.active){touchJoy.cx=x;touchJoy.cy=y}
+});
+
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(gesture.active&&disc.holder==='player'&&gesture.points.length>1)calcThrow();
+  gesture.active=false;gesture.points=[];touchJoy.active=false;
+  if(drawingPath){
+    drawingPath=false;
+    if(currentPath.length>3&&selectedPlayer!==null){
+      tacticPlayers[selectedPlayer].path=[...currentPath];tacticPlayers[selectedPlayer].pathIdx=0;tacticPlayers[selectedPlayer].pathOpacity=0;
+    }
+    currentPath=[]
+  }
+});
+
+function calcThrow(){
+  if(gesture.points.length<2)return;
+  const s=gesture.points[0],e=gesture.points[gesture.points.length-1],dx=e.x-s.x,dy=e.y-s.y,dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<30)return;
+  const a=Math.atan2(dy,dx),p=Math.min(dist/8,25);
+  disc.holder=null;disc.flying=true;disc.x=player.x+Math.cos(a)*30;disc.y=player.y+Math.sin(a)*30;
+  disc.vx=Math.cos(a)*p;disc.vy=Math.sin(a)*p;disc.spin=10;disc.lift=0.4
+}
+
+// ===== 传盘动画 =====
+let passAnim={active:false,fromX:0,fromY:0,toX:0,toY:0,progress:0,timer:0};
+
+function drawPassLine(fx,fy,tx,ty,color){
+  passAnim={active:true,fromX:fx,fromY:fy,toX:tx,toY:ty,progress:0,timer:Date.now()};
+  setTimeout(()=>{passAnim.active=false},800)
+}
+
+// ===== 游戏循环 =====
+function loop(){
+  if(!gameRunning)return;
+  update();draw();requestAnimationFrame(loop)
+}
+
+function update(){
+  // 对战模式逻辑
+  if(!tacticMode){
+    player.vx=0;player.vy=0;
+    if(disc.holder!=='player'){
+      if(keys['KeyA']||keys['ArrowLeft'])player.vx=-player.speed;
+      if(keys['KeyD']||keys['ArrowRight'])player.vx=player.speed;
+      if(keys['KeyW']||keys['ArrowUp'])player.vy=-player.speed;
+      if(keys['KeyS']||keys['ArrowDown'])player.vy=player.speed;
+    }
+    if(touchJoy.active&&disc.holder!=='player'){
+      const dx=touchJoy.cx-touchJoy.sx,dy=touchJoy.cy-touchJoy.sy,d=Math.sqrt(dx*dx+dy*dy);
+      if(d>20){player.vx=(dx/d)*player.speed;player.vy=(dy/d)*player.speed}
+    }
+    player.x+=player.vx;player.y+=player.vy;
+    if(player.x<FIELD.endZ)player.x=FIELD.endZ;if(player.x>FIELD.w-FIELD.endZ)player.x=FIELD.w-FIELD.endZ;
+    if(player.y<60)player.y=60;if(player.y>540)player.y=540;
+
+    if(gameMode==='match'){
+      const now=Date.now();
+      if(now-ai._lastDecision>200){
+        ai._lastDecision=now;
+        let tx=700,ty=350;
+        if(disc.holder==='player'){tx=750;ty=disc.y}else if(disc.holder==='ai'){tx=FIELD.endZ+50;ty=300}else{tx=disc.x+60;ty=disc.y}
+        ai.vx=Math.sign(tx-ai.x)*ai.speed*0.8;ai.vy=Math.sign(ty-ai.y)*ai.speed*0.4
+      }
+      ai.x+=ai.vx;ai.y+=ai.vy;
+      if(ai.x<FIELD.endZ)ai.x=FIELD.endZ;if(ai.x>FIELD.w-FIELD.endZ)ai.x=FIELD.w-FIELD.endZ;
+      if(ai.y<60)ai.y=60;if(ai.y>540)ai.y=540;
+      if(disc.holder==='ai'&&!disc.flying&&Math.random()<0.05){
+        const a=Math.atan2(300-ai.y,FIELD.endZ+40-ai.x)+(Math.random()-0.5)*0.3;
+        disc.vx=Math.cos(a)*10;disc.vy=Math.sin(a)*10;disc.holder=null;disc.flying=true
+      }
+    }
+
+    if(disc.holder==='player'){disc.x=player.x+25;disc.y=player.y}
+    else if(disc.holder==='ai'){disc.x=ai.x+20;disc.y=ai.y}
+
+    if(disc.flying){
+      disc.rot+=disc.spin;disc.vy+=0.3-disc.lift;disc.vx*=0.995;disc.vy*=0.999;
+      disc.x+=disc.vx;disc.y+=disc.vy;
+      if(disc.x<-20||disc.x>FIELD.w+20||disc.y<20||disc.y>580)resetDisc();
+      const dp=Math.hypot(disc.x-player.x,disc.y-player.y),da=Math.hypot(disc.x-ai.x,disc.y-ai.y);
+      if(dp<35){disc.holder='player';disc.flying=false}
+      else if(da<35&&gameMode==='match'){disc.holder='ai';disc.flying=false}
+      if(disc.holder==='ai'&&Math.hypot(ai.x-player.x,ai.y-player.y)<35&&Math.random()<0.03){
+        disc.holder='player';disc.flying=false;disc.vx=0;disc.vy=0
+      }
+      if(!disc.scored){
+        if(disc.x>=FIELD.w-FIELD.endZ-10&&disc.y>=150&&disc.y<=450){score.l++;disc.scored=true;showMsg('得分!',1200);setTimeout(resetDisc,1100)}
+        if(disc.x<=FIELD.endZ+10&&disc.y>=150&&disc.y<=450){score.r++;disc.scored=true;showMsg('得分!',1200);setTimeout(resetDisc,1100)}
+      }
+    }
+    return
+  }
+
+  // 战术模式更新
+  if(playing){
+    let allDone=true;
+    for(const p of tacticPlayers){
+      if(p.path&&p.pathIdx<p.path.length){allDone=false;break}
+    }
+    if(allDone){playing=false;document.getElementById('dmBtn').textContent='▶ 演示';return}
+  }
+
+  for(const p of tacticPlayers){
+    if(p.path&&(!playing||p.pathIdx<p.path.length)){
+      if(p.pathIdx<p.path.length){
+        const t=p.path[p.pathIdx],dx=t.x-p.x,dy=t.y-p.y,d=Math.sqrt(dx*dx+dy*dy);
+        if(d<3){
+          p.pathIdx++;
+          p.vx=0;p.vy=0; // 到点立即刹车
+          if(p.pathIdx>=p.path.length){p.pathOpacity=1}
+        }else{
+          p.vx=(dx/d)*p.speed;p.vy=(dy/d)*p.speed;
+          p.x+=p.vx;p.y+=p.vy
+        }
+      }
+    }else{
+      p.vx=0;p.vy=0;
+      if(p.pathOpacity>0){
+        p.pathOpacity-=0.008;
+        if(p.pathOpacity<=0){p.pathOpacity=0;p.path=null;p.pathIdx=0}
+      }else{
+        p.x+=p.vx;p.y+=p.vy // 无路线时不动
+      }
+    }
+    if(!p.path||p.pathIdx>=p.path.length){p.vx=0;p.vy=0} // 二次保险
+    if(p.x<FIELD.endZ-20)p.x=FIELD.endZ-20;if(p.x>FIELD.w-FIELD.endZ+20)p.x=FIELD.w-FIELD.endZ+20;
+    if(p.y<50)p.y=50;if(p.y>550)p.y=550
+  }
+}
+
+// ===== 绘制 =====
+function draw(){
+  // 场地 - 明亮草地渐变
+  const grad=ctx.createLinearGradient(0,0,0,FIELD.h);
+  grad.addColorStop(0,'#3cb043');grad.addColorStop(.5,'#2d9a3e');grad.addColorStop(1,'#1f7a2e');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,FIELD.w,FIELD.h);
+
+  // 得分区（半透明高亮）
+  ctx.fillStyle='rgba(255,255,255,.07)';
+  ctx.fillRect(0,0,FIELD.endZ,FIELD.h);
+  ctx.fillRect(FIELD.w-FIELD.endZ,0,FIELD.endZ,FIELD.h);
+  ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=3;
+  ctx.strokeRect(FIELD.endZ,0,FIELD.w-FIELD.endZ*2,FIELD.h);
+
+  // 得分区标签
+  ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+  ctx.fillText('▶ 蓝队进攻方向',FIELD.endZ/2,28);
+  ctx.fillText('红队进攻方向 ◀',FIELD.w-FIELD.endZ/2,FIELD.h-22);
+  ctx.font='bold 24px sans-serif';ctx.fillStyle='rgba(255,255,255,.12)';
+  ctx.fillText('得分区',FIELD.endZ/2,FIELD.h/2-6);
+  ctx.fillText('得分区',FIELD.w-FIELD.endZ/2,FIELD.h/2-6);
+
+  // 草地纹理
+  ctx.fillStyle='rgba(255,255,255,.04)';
+  for(let i=0;i<120;i++){ctx.fillRect((i*31+7)%(FIELD.w-40)+20,(i*19+12)%(FIELD.h-60)+30,2,7)}
+
+  // 中场线
+  ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=2;ctx.setLineDash([14,10]);
+  ctx.beginPath();ctx.moveTo(FIELD.w/2,25);ctx.lineTo(FIELD.w/2,FIELD.h-25);ctx.stroke();ctx.setLineDash([]);
+
+  // 中场圆
+  ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(FIELD.w/2,FIELD.h/2,60,0,Math.PI*2);ctx.stroke();
+
+  // 砖点标记
+  [[FIELD.endZ+20,200],[FIELD.w-FIELD.endZ-20,400]].forEach(([x,y])=>{
+    ctx.fillStyle='rgba(255,255,255,.25)';ctx.fillRect(x-3,y-3,6,6);
+    ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText('▲砖',x,y-10)
+  });
+
+  // 码线（每10码）
+  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
+  for(let x=FIELD.endZ+50;x<FIELD.w-FIELD.endZ;x+=60){
+    ctx.beginPath();ctx.moveTo(x,20);ctx.lineTo(x,FIELD.h-20);ctx.stroke()
+  }
+
+  if(tacticMode){
+    // 战术模式下画队员
+    for(const p of tacticPlayers){
+      // 路线
+      if(p.path&&p.path.length>1){
+        const alpha=p.pathOpacity>0?p.pathOpacity:1;
+        ctx.strokeStyle=p.color+Math.round(alpha*180).toString(16).padStart(2,'0');
+        ctx.lineWidth=3;ctx.setLineDash([6,5]);
+        ctx.beginPath();ctx.moveTo(p.path[0].x,p.path[0].y);
+        let lastX=p.path[0].x,lastY=p.path[0].y;
+        for(let j=1;j<p.path.length;j++){
+          ctx.lineTo(p.path[j].x,p.path[j].y);
+          lastX=p.path[j].x;lastY=p.path[j].y
+        }
+        ctx.stroke();ctx.setLineDash([]);
+        // 路线终点箭头
+        ctx.fillStyle=p.color;
+        const a=Math.atan2(lastY-p.path[p.path.length-2].y,lastX-p.path[p.path.length-2].x);
+        drawArrow(lastX,lastY,a,p.color)
+      }
+      // 阴影
+      ctx.fillStyle='rgba(0,0,0,.2)';
+      ctx.beginPath();ctx.ellipse(p.x+3,p.y+17,16,7,0,0,Math.PI*2);ctx.fill();
+
+      // 身体 - 明亮渐变
+      const r=selectedPlayer===tacticPlayers.indexOf(p)?23:18;
+      const grd=ctx.createRadialGradient(p.x-5,p.y-6,2,p.x,p.y,r);
+      const baseCol=p.color==='#48f'?'#5a9dff':'#ff6a6a';
+      const darkCol=p.color==='#48f'?'#2a5a9a':'#aa3030';
+      grd.addColorStop(0,baseCol);grd.addColorStop(.7,p.color);grd.addColorStop(1,darkCol);
+      ctx.fillStyle=grd;
+      ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=selectedPlayer===tacticPlayers.indexOf(p)?'#0f8':'rgba(255,255,255,.2)';
+      ctx.lineWidth=selectedPlayer===tacticPlayers.indexOf(p)?3:1.5;ctx.stroke();
+
+      // 选中光圈
+      if(selectedPlayer===tacticPlayers.indexOf(p)){
+        ctx.strokeStyle='rgba(0,255,136,.4)';ctx.lineWidth=2;ctx.setLineDash([4,4]);
+        ctx.beginPath();ctx.arc(p.x,p.y,r+6,0,Math.PI*2);ctx.stroke();ctx.setLineDash([])
+      }
+
+      // 持盘标记（发光飞盘）
+      if(p.hasDisc){
+        ctx.shadowColor='#fc0';ctx.shadowBlur=12;
+        ctx.fillStyle='#ffe066';
+        ctx.beginPath();ctx.ellipse(p.x+24,p.y-6,10,5,0.3,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#ff8800';
+        ctx.beginPath();ctx.ellipse(p.x+22,p.y-5,7,3.5,0.3,0,Math.PI*2);ctx.fill();
+        ctx.shadowBlur=0;
+        ctx.fillStyle='#fff';ctx.beginPath();
+        ctx.arc(p.x+22,p.y-6,2,0,Math.PI*2);ctx.fill()
+      }
+
+      // 编号（带背景圈）
+      const blue=p.color==='#48f'?tacticPlayers.filter(p=>p.color==='#48f'):tacticPlayers.filter(p=>p.color==='#f44');
+      const num=p.color==='#48f'?blue.indexOf(p)+1:tacticPlayers.filter(p=>p.color==='#f44').indexOf(p)+1;
+      ctx.fillStyle='rgba(255,255,255,.95)';ctx.font='bold 14px sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(num,p.x,p.y+1);
+
+      // 角色名
+      ctx.fillStyle='rgba(0,0,0,.7)';ctx.font='bold 11px sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='bottom';
+      const roleCol=p.role==='控盘手'?'#ffe066':p.role==='主防'?'#ff8888':'rgba(255,255,255,.7)';
+      ctx.fillStyle=roleCol;
+      ctx.fillText(p.role,p.x,p.y-22)
+    }
+
+    // 持盘方及防守朝向
+    const h=tacticPlayers.find(p=>p.hasDisc);
+    ctx.fillStyle='#fa0';ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText(h&&h.color==='#48f'?'蓝队持盘':'红队持盘',FIELD.w/2,5);
+    // 防守朝向指示（迫使反手侧 → 即向下方向）
+    const defColor=h&&h.color==='#48f'?'#f44':'#48f';
+    ctx.strokeStyle=defColor;ctx.lineWidth=4;ctx.setLineDash([8,6]);
+    ctx.beginPath();ctx.moveTo(FIELD.w/2-40,20);ctx.lineTo(FIELD.w/2+40,20);ctx.stroke();
+    ctx.strokeStyle=defColor+'66';ctx.lineWidth=2;ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(FIELD.w/2,22);ctx.lineTo(FIELD.w/2,45);ctx.stroke();
+    ctx.fillStyle=defColor;ctx.font='11px sans-serif';
+    ctx.fillText('防守方迫使',FIELD.w/2-50,25);
+    ctx.fillText('反手侧 ↑',FIELD.w/2+30,25);
+    ctx.fillStyle='rgba(255,255,255,.4)';ctx.font='13px sans-serif';
+    ctx.fillText(drawMode==='run'?'单击选人拖动画跑位路线 双击传盘':'单击选人拖动画传球路线 双击传盘',FIELD.w/2,48);
+    ctx.textBaseline='alphabetic';ctx.textAlign='center';
+
+    // 画线路
+    if(drawingPath&&currentPath.length>1){
+      ctx.strokeStyle=drawMode==='pass'?'#ff0':'#0f8';
+      ctx.lineWidth=3;ctx.setLineDash(drawMode==='pass'?[8,6]:[]);
+      ctx.beginPath();ctx.moveTo(currentPath[0].x,currentPath[0].y);
+      for(let i=1;i<currentPath.length;i++)ctx.lineTo(currentPath[i].x,currentPath[i].y);
+      ctx.stroke();ctx.setLineDash([])
+    }
+
+    // 传盘动画
+    if(passAnim.active){
+      const elapsed=Date.now()-passAnim.timer;
+      if(elapsed<800){
+        const t=easeInOut(elapsed/800);
+        const x=passAnim.fromX+(passAnim.toX-passAnim.fromX)*t;
+        const y=passAnim.fromY+(passAnim.toY-passAnim.fromY)*t;
+        ctx.fillStyle='#fc0';ctx.beginPath();
+        ctx.arc(x,y,8,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=2;ctx.stroke();
+
+        ctx.strokeStyle='rgba(255,204,0,.4)';ctx.lineWidth=3;ctx.setLineDash([6,4]);
+        ctx.beginPath();ctx.moveTo(passAnim.fromX,passAnim.fromY);
+        ctx.lineTo(x,y);ctx.stroke();ctx.setLineDash([])
+      }else passAnim.active=false
+    }
+    return
+  }
+
+  // ===== 对战模式绘制 =====
+  // 玩家
+  ctx.fillStyle='rgba(0,0,0,.2)';ctx.beginPath();ctx.ellipse(player.x+2,player.y+18,15,7,0,0,Math.PI*2);ctx.fill();
+  const pGrd=ctx.createRadialGradient(player.x-5,player.y-5,2,player.x,player.y,16);
+  pGrd.addColorStop(0,'#7abfff');pGrd.addColorStop(.7,'#4a8eff');pGrd.addColorStop(1,'#1a5bbf');
+  ctx.fillStyle=pGrd;ctx.beginPath();ctx.arc(player.x,player.y,16,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('你',player.x,player.y);
+
+  // AI
+  ctx.fillStyle='rgba(0,0,0,.2)';ctx.beginPath();ctx.ellipse(ai.x+2,ai.y+18,15,7,0,0,Math.PI*2);ctx.fill();
+  const aGrd=ctx.createRadialGradient(ai.x-5,ai.y-5,2,ai.x,ai.y,16);
+  aGrd.addColorStop(0,'#ff8a8a');aGrd.addColorStop(.7,'#ff5555');aGrd.addColorStop(1,'#cc2222');
+  ctx.fillStyle=aGrd;ctx.beginPath();ctx.arc(ai.x,ai.y,16,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('AI',ai.x,ai.y);
+
+  // 飞盘（发光效果）
+  ctx.shadowColor='rgba(255,200,0,.3)';ctx.shadowBlur=8;
+  ctx.fillStyle='rgba(0,0,0,.2)';ctx.beginPath();ctx.ellipse(disc.x+2,disc.y+4,disc.r*2+2,disc.r+1,0,0,Math.PI*2);ctx.fill();
+  ctx.save();ctx.translate(disc.x,disc.y);ctx.rotate(disc.rot*Math.PI/180);
+  const dg=ctx.createRadialGradient(0,0,0,0,0,disc.r*2);
+  dg.addColorStop(0,'#fff5cc');dg.addColorStop(.5,'#ffcc00');dg.addColorStop(1,'#ee8800');
+  ctx.fillStyle=dg;
+  ctx.beginPath();ctx.ellipse(0,0,disc.r*2+2,disc.r+1,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=2;ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,3.5,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+
+  // 手势（粗亮线）
+  if(disc.holder==='player'&&gesture.active&&gesture.points.length>1){
+    ctx.strokeStyle='rgba(0,255,136,.8)';ctx.lineWidth=5;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.shadowColor='rgba(0,255,136,.3)';ctx.shadowBlur=10;
+    ctx.beginPath();ctx.moveTo(gesture.points[0].x,gesture.points[0].y);
+    for(let i=1;i<gesture.points.length;i++)ctx.lineTo(gesture.points[i].x,gesture.points[i].y);
+    ctx.stroke();ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.arc(gesture.sx,gesture.sy,12,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#0f8';ctx.beginPath();ctx.arc(gesture.sx,gesture.sy,8,0,Math.PI*2);ctx.fill();
+    const lp=gesture.points[gesture.points.length-1];
+    ctx.fillStyle='rgba(255,170,0,.9)';ctx.beginPath();ctx.arc(lp.x,lp.y,8,0,Math.PI*2);ctx.fill()
+  }
+
+  // 持盘提示
+  if(disc.holder==='player'){
+    ctx.fillStyle='#ff4444';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText('⛔ 持盘静止',player.x,player.y-26);
+    ctx.fillStyle='#0f8';ctx.font='bold 15px sans-serif';
+    ctx.fillText('↕ 滑动投掷',player.x,player.y-40)
+  }
+
+  if(disc.holder==='ai'&&Math.hypot(ai.x-player.x,ai.y-player.y)<50){
+    ctx.fillStyle='#ff4444';ctx.font='bold 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText('⚡ 抢断!',player.x,player.y-26)
+  }
+
+  // 分数
+  ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillStyle='rgba(255,255,255,.05)';ctx.fillRect(FIELD.endZ+30,2,80,48);
+  ctx.fillStyle='#7abfff';ctx.fillText('蓝队',FIELD.endZ+70,8);
+  ctx.fillStyle='#fff';ctx.font='bold 30px sans-serif';ctx.fillText(score.l,FIELD.endZ+70,28);
+  ctx.fillStyle='rgba(255,255,255,.3)';ctx.font='18px sans-serif';ctx.fillText('VS',FIELD.w/2,12);
+  ctx.fillStyle='rgba(255,255,255,.05)';ctx.fillRect(FIELD.w-FIELD.endZ-110,2,80,48);
+  ctx.fillStyle='#ff7a7a';ctx.font='bold 14px sans-serif';ctx.fillText('红队',FIELD.w-FIELD.endZ-70,8);
+  ctx.fillStyle='#fff';ctx.font='bold 30px sans-serif';ctx.fillText(score.r,FIELD.w-FIELD.endZ-70,28);
+
+  ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='12px sans-serif';ctx.textBaseline='bottom';
+  ctx.fillText('WASD移动 滑动投掷 靠近抢断 ESC返回',FIELD.w/2,FIELD.h-5);
+  ctx.textBaseline='alphabetic'
+}
+
+function drawArrow(x,y,angle,color){
+  const s=10;
+  ctx.save();ctx.translate(x,y);ctx.rotate(angle);
+  ctx.fillStyle=color;
+  ctx.beginPath();ctx.moveTo(s,0);ctx.lineTo(-s,-s*0.6);ctx.lineTo(-s,s*0.6);ctx.closePath();ctx.fill();
+  ctx.restore()
+}
+
+function easeInOut(t){return t<.5?2*t*t:-1+(4-2*t)*t}
+
+function drawGoal(x,y,c){
+  ctx.strokeStyle=c;ctx.lineWidth=4;ctx.strokeRect(x-5,y,35,100);
+  ctx.fillStyle=c+'22';ctx.fillRect(x-5,y,35,100);
+  ctx.lineWidth=1;
+  for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(x-5,y+i*20);ctx.lineTo(x+30,y+i*20);ctx.stroke()}
+}
+</script>
+</body>
+</html>
