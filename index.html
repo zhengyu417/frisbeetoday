@@ -20,7 +20,9 @@ canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rg
 .help{color:#667;font-size:13px;margin-top:18px}
 #msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:40px;color:#fff;font-weight:bold;background:rgba(0,0,0,.7);padding:18px 28px;border-radius:14px;pointer-events:none;z-index:50;display:none;text-shadow:0 2px 10px rgba(0,0,0,.5);backdrop-filter:blur(4px)}
 .hidden{display:none!important}
-.toolbar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:5px;flex-wrap:wrap;justify-content:center;pointer-events:auto;z-index:30;max-width:96vw;padding:4px 0}
+.toolbar{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;pointer-events:auto;z-index:30;max-width:98vw;padding:6px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.toolbar::-webkit-scrollbar{display:none}
+.tb-btn{padding:7px 12px;font-size:13px;border:none;border-radius:8px;background:rgba(20,35,55,.9);color:#cde;cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);transition:all .15s;flex-shrink:0}
 .tb-btn{padding:7px 14px;font-size:13px;border:none;border-radius:8px;background:rgba(20,35,55,.88);color:#cde;cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);transition:all .15s}
 .tb-btn:hover{background:rgba(40,70,100,.9);color:#0f8;border-color:rgba(0,255,136,.2)}
 .tb-btn.on{background:#0f8;color:#111;border-color:#0f8}
@@ -76,31 +78,26 @@ canvas{border-radius:12px;box-shadow:0 0 60px rgba(0,255,136,.12),0 20px 60px rg
 <div id="msg"></div>
 <div id="dpad"><div><div class="d" data-k="KeyA">←</div><div class="d" data-k="KeyW">↑</div><div class="d" data-k="KeyD">→</div><div class="d" data-k="KeyS">↓</div><div class="d" onclick="returnToMenu()" style="background:rgba(100,40,40,.5);font-size:16px">返回</div></div></div>
 
-<!-- 战术工具栏 -->
+<!-- 战术工具栏（底部滚动） -->
 <div id="tbar" class="toolbar hidden">
-  <button class="tb-btn" onclick="showFormMenu()" id="fmBtn">▼ 阵型</button>
-  <button class="tb-btn" onclick="saveTactic()">💾 保存</button>
-  <button class="tb-btn" onclick="loadTactic()">📂 载入</button>
-  <button class="tb-btn" onclick="clearAllRoutes()">清路线</button>
-  <button class="tb-btn" onclick="playAnimation()" id="dmBtn">▶ 演示</button>
-  <button class="tb-btn" onclick="stepForward()">⏭ 步进</button>
-  <button class="tb-btn" onclick="switchPossession()">⇄ 换盘</button>
-  <button class="tb-btn" onclick="returnToMenu()" style="background:rgba(100,40,40,.8)">✕ 返回</button>
-  <span id="fName" style="color:#0f8;font-size:12px;padding:4px 8px;background:rgba(0,0,0,.3);border-radius:4px;display:none"></span>
-</div>
-
-<!-- 阵型选择弹窗（手机友好） -->
-<div id="formMenu" class="hidden" style="position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:35;background:rgba(15,20,35,.95);border-radius:16px;padding:16px 20px;border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;max-width:95vw">
-  <button class="tb-btn" onclick="setFormation('vertical');hideFormMenu()" style="font-size:11px;padding:6px 8px">竖排进</button>
-  <button class="tb-btn" onclick="setFormation('horizontal');hideFormMenu()" style="font-size:11px;padding:6px 8px">横排进</button>
-  <button class="tb-btn" onclick="setFormation('side');hideFormMenu()" style="font-size:11px;padding:6px 8px">侧排进</button>
-  <button class="tb-btn" onclick="setFormation('spread');hideFormMenu()" style="font-size:11px;padding:6px 8px">散开进</button>
-  <button class="tb-btn" onclick="setFormation('zone');hideFormMenu()" style="font-size:11px;padding:6px 8px">区域防</button>
-  <button class="tb-btn" onclick="setFormation('cup');hideFormMenu()" style="font-size:11px;padding:6px 8px">杯型防</button>
-  <button class="tb-btn" onclick="setFormation('wall');hideFormMenu()" style="font-size:11px;padding:6px 8px">墙式防</button>
-  <button class="tb-btn" onclick="setFormation('man');hideFormMenu()" style="font-size:11px;padding:6px 8px">人盯人</button>
-  <button class="tb-btn" onclick="setFormation('force');hideFormMenu()" style="font-size:11px;padding:6px 8px">迫边</button>
-  <button class="tb-btn" onclick="setFormation('endzone');hideFormMenu()" style="font-size:11px;padding:6px 8px">得分区</button>
+  <button class="tb-btn" onclick="setFormation('vertical')">竖排</button>
+  <button class="tb-btn" onclick="setFormation('horizontal')">横排</button>
+  <button class="tb-btn" onclick="setFormation('side')">侧排</button>
+  <button class="tb-btn" onclick="setFormation('spread')">散开</button>
+  <button class="tb-btn" onclick="setFormation('zone')">区域</button>
+  <button class="tb-btn" onclick="setFormation('cup')">杯型</button>
+  <button class="tb-btn" onclick="setFormation('wall')">墙式</button>
+  <button class="tb-btn" onclick="setFormation('man')">盯人</button>
+  <button class="tb-btn" onclick="setFormation('force')">迫边</button>
+  <button class="tb-btn" onclick="setFormation('endzone')">得分区</button>
+  <button class="tb-btn" onclick="saveTactic()">💾</button>
+  <button class="tb-btn" onclick="loadTactic()">📂</button>
+  <button class="tb-btn" onclick="clearAllRoutes()">🗑</button>
+  <button class="tb-btn" onclick="playAnimation()" id="dmBtn">▶</button>
+  <button class="tb-btn" onclick="stepForward()">⏭</button>
+  <button class="tb-btn" onclick="switchPossession()">⇄</button>
+  <button class="tb-btn" onclick="returnToMenu()" style="background:rgba(100,40,40,.8)">✕</button>
+  <span id="fName" style="color:#0f8;font-size:11px;padding:3px 6px;background:rgba(0,0,0,.3);border-radius:4px;display:none;flex-shrink:0"></span>
 </div>
 
 <script>
@@ -143,15 +140,10 @@ function returnToMenu(){
   document.getElementById('tacticMenu').classList.add('hidden');
   document.getElementById('dpad').classList.add('hidden');
   document.getElementById('tbar').classList.add('hidden');
-  document.getElementById('formMenu').classList.add('hidden');
   document.getElementById('floatBack').classList.add('hidden');
   selectedPlayer=null;drawingPath=false;currentPath=[];playing=false;
   hideMsg()
 }
-
-// 阵型选择弹窗
-function showFormMenu(){document.getElementById('formMenu').classList.remove('hidden')}
-function hideFormMenu(){document.getElementById('formMenu').classList.add('hidden')}
 
 function startMatch(n){
   document.getElementById('matchMenu').classList.add('hidden');
@@ -406,9 +398,6 @@ canvas.addEventListener('mouseup',e=>{
 canvas.addEventListener('click',e=>{
   if(!gameRunning)return;
   const[x,y]=getCanvasXY(e);
-  // 关闭阵型弹窗
-  const fm=document.getElementById('formMenu');
-  if(!fm.classList.contains('hidden')){fm.classList.add('hidden')}
   if(tacticMode){
     for(let i=0;i<tacticPlayers.length;i++){
       if(Math.hypot(tacticPlayers[i].x-x,tacticPlayers[i].y-y)<28){
